@@ -1,0 +1,22 @@
+{
+  "name": "build-nodejs",
+  "version": "1.0.0",
+  "description": "Heroku Application for building static sites with Node.JS-based generators",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ConditorIO/build-nodejs.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ConditorIO/build-nodejs/issues"
+  },
+  "homepage": "https://github.com/ConditorIO/build-nodejs#readme",
+  "devDependencies": {
+    "github": "^8.2.1"
+  }
+}
