@@ -1,13 +1,29 @@
-const firebase = require('firebase');
+const firebase = require('firebase-admin');
+const Promise = require('promise');
 const request = require('request');
 const tar = require('tar');
+const gunzip = require('gunzip-maybe');
 const urlParse = require('url-parse');
+const fs = require('fs');
+const colors = require('colors');
+
+console.log(`
+   ######   #######  ##    ## ########  #### ########  #######  ########
+  ##    ## ##     ## ###   ## ##     ##  ##     ##    ##     ## ##     ##
+  ##       ##     ## ####  ## ##     ##  ##     ##    ##     ## ##     ##
+  ##       ##     ## ## ## ## ##     ##  ##     ##    ##     ## ########
+  ##       ##     ## ##  #### ##     ##  ##     ##    ##     ## ##   ##
+  ##    ## ##     ## ##   ### ##     ##  ##     ##    ##     ## ##    ##
+   ######   #######  ##    ## ########  ####    ##     #######  ##     ##
+`.red);
 
 const site_id = process.argv[2];
 const build_id = process.argv[3];
 
+const serviceAccount = JSON.parse(process.env.GCLOUD_SERVICE_ACCOUNT);
+
 firebase.initializeApp({
-	serviceAccount: JSON.parse(process.env.GCLOUD_SERVICE_ACCOUNT),
+	credential: firebase.credential.cert(serviceAccount),
 	databaseURL: process.env.FIREBASE_DATABASE_URL,
 	databaseAuthVariableOverride: {
 		uid: "build-worker"
@@ -15,22 +31,37 @@ firebase.initializeApp({
 });
 
 Promise.all([
-	firebase.database().ref('sites').child(site_id).once("value"),
-	firebase.database().ref('builds').child(site_id).child(build_id).once("value")
-]).then(results => {
+	firebase.database().ref().child("sites").child(site_id).once("value"),
+	firebase.database().ref().child("builds").child(site_id).child(build_id).once("value")
+])
+.then(results => {
 	var [site, build] = results.map(i => i.val());
 	if(!site || !build) return Promise.reject("Site or build not found.");
 
-	var repoPath = urlParse(site.repo.url).pathname;
+	console.log("Fetched Metadata".green);
 
-	request('https://api.github.com/repos/' + repoPath + '/tarball/' + build.commit_id, {
-		headers: {
-			'Authorization': 'token ' + site.repo.read_token
-		}
-	}).pipe(tar.Extract({
-		path: './build',
-		strip: 1
-	})).on("end", () => {
-		console.log(fs.readdirSync("./build"));
+	const repoPath = urlParse(site.repo.url).pathname;
+	const url = 'https://api.github.com/repos' + repoPath + '/tarball/' + build.commit_id + "?access_token=" + site.repo.read_token;
+
+	var chunk = 0;
+
+	return new Promise((resolve, reject) => {
+		console.log("Downloading and extracting from GitHub");
+
+		request(url, {
+	    	headers: {'User-Agent': 'Conditor'}
+		})
+		.on("response", (r) => {res = r})
+		.pipe(gunzip())
+		.pipe(tar.Extract({
+			path: './build',
+			strip: 1
+		}))
+		.on("data", () => {if(chunk++ % 1024 == 0) process.stdout.write(".")})
+		.on("end", resolve)
+		.on("error", reject);
 	});
-});
+})
+.then(() => console.log("\nFinished download!".green))
+.catch(console.error)
+.then(() => process.exit());
