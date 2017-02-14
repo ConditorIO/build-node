@@ -16,7 +16,9 @@
     "url": "https://github.com/ConditorIO/build-nodejs/issues"
   },
   "homepage": "https://github.com/ConditorIO/build-nodejs#readme",
-  "devDependencies": {
-    "github": "^8.2.1"
+  "dependencies": {
+    "firebase": "^3.6.9",
+    "github": "^8.2.1",
+    "url-parse": "^1.1.7"
   }
 }
