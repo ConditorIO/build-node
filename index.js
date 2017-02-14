@@ -28,7 +28,9 @@ Promise.all([
 			'Authorization: token ' + site.repo.read_token
 		}
 	}).pipe(tar.Extract({
-		path: 'build',
+		path: './build',
 		strip: 1
-	}))
+	})).on("end", () => {
+		console.log(fs.readdirSync("./build"));
+	});
 });
