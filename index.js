@@ -25,7 +25,7 @@ Promise.all([
 
 	request('https://api.github.com/repos/' + repoPath + '/tarball/' + build.commit_id, {
 		headers: {
-			'Authorization: token ' + site.repo.read_token
+			'Authorization': 'token ' + site.repo.read_token
 		}
 	}).pipe(tar.Extract({
 		path: './build',
