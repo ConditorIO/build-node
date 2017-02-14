@@ -30,15 +30,20 @@ firebase.initializeApp({
 	}
 });
 
+var build = firebase.database().ref().child("builds").child(site_id).child(build_id);
+
 Promise.all([
 	firebase.database().ref().child("sites").child(site_id).once("value"),
-	firebase.database().ref().child("builds").child(site_id).child(build_id).once("value")
+	build.once("value")
 ])
 .then(results => {
 	var [site, build] = results.map(i => i.val());
 	if(!site || !build) return Promise.reject("Site or build not found.");
 
 	console.log("Fetched Metadata".green);
+
+	build.child("status").set("status", "running");
+	build.child("started_at").set(firebase.database.ServerValue.TIMESTAMP);
 
 	const repoPath = urlParse(site.repo.url).pathname;
 	const url = 'https://api.github.com/repos' + repoPath + '/tarball/' + build.commit_id + "?access_token=" + site.repo.read_token;
@@ -63,5 +68,13 @@ Promise.all([
 	});
 })
 .then(() => console.log("\nFinished download!".green))
-.catch(console.error)
+.then(() => {
+
+})
+.catch((e) => {
+	build.child("status").set("failed");
+	build.child("finished_at").set(firebase.database.ServerValue.TIMESTAMP);
+	console.error(e);
+	process.exit(1);
+})
 .then(() => process.exit());
