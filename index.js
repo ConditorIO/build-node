@@ -5,7 +5,29 @@ const tar = require('tar');
 const gunzip = require('gunzip-maybe');
 const urlParse = require('url-parse');
 const fs = require('fs');
+const path = require('path');
 const colors = require('colors');
+const npm = require('npm');
+const bower = require('bower');
+const execa = require('execa');
+
+function exec(cmd, fileCondition) {
+	if(fileCondition && !fs.existsSync(path.join("./build", fileCondition))) {
+		return Promise.resolve();
+	}
+
+	var cmd = execa.shell(cmd, {
+		cwd: "./build",
+		stdio: "inherit"
+	});
+	return cmd;
+}
+
+function fail(error) {
+	return function() {
+		return Promise.reject(error);
+	}
+}
 
 console.log(`
    ######   #######  ##    ## ########  #### ########  #######  ########
@@ -30,11 +52,11 @@ firebase.initializeApp({
 	}
 });
 
-var build = firebase.database().ref().child("builds").child(site_id).child(build_id);
+var buildref = firebase.database().ref().child("builds").child(site_id).child(build_id);
 
 Promise.all([
 	firebase.database().ref().child("sites").child(site_id).once("value"),
-	build.once("value")
+	buildref.once("value")
 ])
 .then(results => {
 	var [site, build] = results.map(i => i.val());
@@ -42,8 +64,8 @@ Promise.all([
 
 	console.log("Fetched Metadata".green);
 
-	build.child("status").set("status", "running");
-	build.child("started_at").set(firebase.database.ServerValue.TIMESTAMP);
+	buildref.child("status").set("running");
+	buildref.child("started_at").set(firebase.database.ServerValue.TIMESTAMP);
 
 	const repoPath = urlParse(site.repo.url).pathname;
 	const url = 'https://api.github.com/repos' + repoPath + '/tarball/' + build.commit_id + "?access_token=" + site.repo.read_token;
@@ -52,6 +74,7 @@ Promise.all([
 
 	return new Promise((resolve, reject) => {
 		console.log("Downloading and extracting from GitHub");
+		return resolve(); //TODO: Downloading wieder enablen
 
 		request(url, {
 	    	headers: {'User-Agent': 'Conditor'}
@@ -68,13 +91,23 @@ Promise.all([
 	});
 })
 .then(() => console.log("\nFinished download!".green))
-.then(() => {
-
-})
+.then(() => exec("NODE_ENV=development npm install").catch(fail("NPM modules could not be installed.")))
+.then(() => exec("npm install bower && bower install", "bower.json").catch(fail("Bower modules could not be installed.")))
+.then(() => exec("npm run build").catch(fail("Build command failed.")))
+.then(() => buildref.update({
+	status: "success",
+	finished_at: firebase.database.ServerValue.TIMESTAMP
+}))
 .catch((e) => {
-	build.child("status").set("failed");
-	build.child("finished_at").set(firebase.database.ServerValue.TIMESTAMP);
 	console.error(e);
-	process.exit(1);
+
+	return buildref.update({
+		status: "failed",
+		error: e,
+		finished_at: firebase.database.ServerValue.TIMESTAMP
+	})
+	.then(() => process.exit(1))
 })
-.then(() => process.exit());
+.then(() => {
+	process.exit()
+});
